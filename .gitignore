@@ -1,0 +1,16 @@
+# Python virtual environments
+**/.venv/
+**/venv/
+
+# Python cache files
+**/__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Editor files
+.vscode/
+
+#pdf
+*.pdf
