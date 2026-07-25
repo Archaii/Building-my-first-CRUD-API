@@ -69,3 +69,64 @@ def create_task(payload: dict | None = Body(default=None)):
 
     tasks.append(new_task)
     return new_task
+
+@app.put("/tasks/{task_id}")
+def update_task(
+    task_id: int,
+    payload: dict | None = Body(default=None),
+):
+    selected_task = None
+
+    for task in tasks:
+        if task["id"] == task_id:
+            selected_task = task
+            break
+
+    if selected_task is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Task {task_id} not found"},
+        )
+
+    if not payload or not any(
+        field in payload for field in ("title", "done")
+    ):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Provide title or done"},
+        )
+
+    if "title" in payload:
+        if (
+            not isinstance(payload["title"], str)
+            or not payload["title"].strip()
+        ):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Title cannot be empty"},
+            )
+
+        selected_task["title"] = payload["title"].strip()
+
+    if "done" in payload:
+        if not isinstance(payload["done"], bool):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Done must be true or false"},
+            )
+
+        selected_task["done"] = payload["done"]
+
+    return selected_task
+
+@app.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    for index, task in enumerate(tasks):
+        if task["id"] == task_id:
+            tasks.pop(index)
+            return Response(status_code=204)
+
+    return JSONResponse(
+        status_code=404,
+        content={"error": f"Task {task_id} not found"},
+    )
