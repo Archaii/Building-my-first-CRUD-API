@@ -21,19 +21,19 @@ tasks = [
     },
 ]
 
-@app.get("/")
+@app.get("/", description="Returns the API name, version, and available endpoints")
 async def root():
     return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
 
-@app.get("/health")
+@app.get("/health", description="Returns the health status of the API")
 def health():
     return {"status": "ok"}
 
-@app.get("/tasks")
+@app.get("/tasks", description="Returns the list of tasks")
 def get_tasks():
     return tasks
 
-@app.get("/tasks/{id}")
+@app.get("/tasks/{id}", description="Returns a specific task by ID")
 def get_task(id: int):
     for task in tasks:
         if task["id"] == id:
@@ -44,7 +44,7 @@ def get_task(id: int):
         content={"error": f"Task {id} not found"},
     )
 
-@app.post("/tasks", status_code=201)
+@app.post("/tasks", status_code=201, description="Creates a new task")
 def create_task(payload: dict | None = Body(default=None)):
     if (
         not payload
@@ -70,7 +70,7 @@ def create_task(payload: dict | None = Body(default=None)):
     tasks.append(new_task)
     return new_task
 
-@app.put("/tasks/{task_id}")
+@app.put("/tasks/{task_id}", description="Updates an existing task")
 def update_task(
     task_id: int,
     payload: dict | None = Body(default=None),
@@ -119,7 +119,7 @@ def update_task(
 
     return selected_task
 
-@app.delete("/tasks/{task_id}", status_code=204)
+@app.delete("/tasks/{task_id}", status_code=204, description="Deletes a task")
 def delete_task(task_id: int):
     for index, task in enumerate(tasks):
         if task["id"] == task_id:
