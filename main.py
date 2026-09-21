@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, Response
 from fastapi.responses import JSONResponse
 
-from db import init_db
+from db import get_task, init_db, list_tasks
 
 
 @asynccontextmanager
@@ -43,18 +43,19 @@ def health():
 
 @app.get("/tasks", description="Returns the list of tasks")
 def get_tasks():
-    return tasks
+    return list_tasks()
 
 @app.get("/tasks/{id}", description="Returns a specific task by ID")
-def get_task(id: int):
-    for task in tasks:
-        if task["id"] == id:
-            return task
+def read_task(id: int):
+    task = get_task(id)
 
-    return JSONResponse(
-        status_code=404,
-        content={"error": f"Task {id} not found"},
-    )
+    if task is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Task {id} not found"},
+        )
+
+    return task
 
 @app.post("/tasks", status_code=201, description="Creates a new task")
 def create_task(payload: dict | None = Body(default=None)):

@@ -53,3 +53,31 @@ def init_db() -> None:
                 "INSERT INTO tasks (title, done) VALUES (?, ?)",
                 EXAMPLE_TASKS,
             )
+
+
+def row_to_task(row: sqlite3.Row) -> dict:
+    """Turn one database row into the JSON shape the API has always returned."""
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "done": bool(row["done"]),
+    }
+
+
+def list_tasks() -> list[dict]:
+    """Return every task, oldest first."""
+    with get_connection() as connection:
+        rows = connection.execute("SELECT * FROM tasks").fetchall()
+
+    return [row_to_task(row) for row in rows]
+
+
+def get_task(task_id: int) -> dict | None:
+    """Return one task by id, or None when no row matches."""
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+
+    return row_to_task(row) if row else None
