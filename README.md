@@ -1,6 +1,8 @@
 # Task CRUD API
 
-A small FastAPI project for creating, reading, updating, and deleting tasks. Tasks are stored in memory, so they reset to the three example tasks whenever the server restarts.
+A small FastAPI project for creating, reading, updating, and deleting tasks.
+Tasks are stored in a SQLite database file called `tasks.db`, so they are still
+there after the server restarts.
 
 ## Install and run
 
@@ -18,7 +20,44 @@ Then start the API with this command:
 python -m fastapi dev main.py --app app
 ```
 
-Open the API at <http://127.0.0.1:8000> or its interactive Swagger documentation at <http://127.0.0.1:8000/docs>.
+Nothing else to set up. SQLite ships with Python, and the first start creates
+`tasks.db`, creates the `tasks` table, and seeds the three example tasks.
+
+Open the API at <http://127.0.0.1:8000> or its interactive Swagger documentation
+at <http://127.0.0.1:8000/docs>.
+
+## Why SQLite
+
+- **One file, zero setup.** The whole database is `tasks.db` next to the code.
+  There is no server to install, start, or configure, and no credentials.
+- **It ships with Python.** `sqlite3` is in the standard library, so a clone of
+  this repo needs no extra database dependency.
+- **The data survives restarts.** An in-memory list is gone the moment the
+  process stops; rows written to `tasks.db` stay on disk.
+
+## Where the database lives
+
+`tasks.db` sits in the project root and is created automatically on the first
+run. It is listed in `.gitignore`, so it is never committed and every clone
+starts with a fresh database holding the same three example tasks. Delete the
+file and restart the server to get back to that clean state.
+
+The `tasks` table has three columns:
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | INTEGER | Primary key. SQLite assigns it. |
+| `title` | TEXT | Required, never empty. |
+| `done` | INTEGER | Stored as `0` or `1`, returned to clients as `false` or `true`. |
+
+## How it is put together
+
+- [`main.py`](main.py) holds the routes, the validation, and the status codes.
+  The endpoints are exactly the ones from the in-memory version.
+- [`db.py`](db.py) holds the storage layer: opening the database, creating the
+  table, seeding it, and the SELECT, INSERT, UPDATE, and DELETE queries.
+- Every query that takes user input uses `?` placeholders and passes the values
+  separately, so nothing from a request is ever glued into an SQL string.
 
 ## Endpoints
 
@@ -52,6 +91,40 @@ content-type: application/json
 
 {"id":1,"title":"Test 1","done":false}
 ```
+
+## Persistence check
+
+```powershell
+curl.exe -i -X POST http://127.0.0.1:8000/tasks -H "Content-Type: application/json" -d "{\"title\":\"Buy milk\"}"
+```
+
+Stop the server, start it again with the same command as above, then run:
+
+```powershell
+curl.exe -i http://127.0.0.1:8000/tasks
+```
+
+`Buy milk` is still in the list, because it is a row in `tasks.db` and not an
+entry in a Python list.
+
+## SQL by hand
+
+`tasks.db` opens directly in [DB Browser for SQLite](https://sqlitebrowser.org/).
+Its rows are the same rows the API serves — there is one file and no syncing
+step, so a change made in DB Browser shows up in `GET /tasks` immediately.
+
+One query run in its "Execute SQL" tab:
+
+```sql
+SELECT * FROM tasks WHERE done = 1;
+```
+
+It returned one row, `3 | Test 3 | 1`, because `Test 3` is the only seeded task
+whose `done` value is `1`.
+
+More queries, and what each one returned, are in [docs/sql-notes.md](docs/sql-notes.md).
+
+![The tasks table open in DB Browser for SQLite](docs/db-browser-tasks-table.png)
 
 ## Swagger UI
 
