@@ -1,9 +1,3 @@
-"""Storage layer for the Task API.
-
-Every task lives in a SQLite database file called tasks.db instead of in a
-Python list, so the data is still there after the server restarts.
-"""
-
 import sqlite3
 from contextlib import closing, contextmanager
 from pathlib import Path
