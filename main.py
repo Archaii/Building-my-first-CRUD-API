@@ -1,7 +1,19 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Body, Response
 from fastapi.responses import JSONResponse
 
-app = FastAPI()
+from db import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create tasks.db, its table, and the example tasks before serving."""
+    init_db()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 tasks = [
         {

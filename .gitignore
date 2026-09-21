@@ -14,3 +14,6 @@
 
 #pdf
 *.pdf
+
+# SQLite database
+*.db
