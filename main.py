@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, Response
 from fastapi.responses import JSONResponse
 
-from db import get_task, init_db, list_tasks
+from db import create_task as insert_task, get_task, init_db, list_tasks
 
 
 @asynccontextmanager
@@ -69,19 +69,7 @@ def create_task(payload: dict | None = Body(default=None)):
             content={"error": "Title is required"},
         )
 
-    next_id = max(
-        (task["id"] for task in tasks),
-        default=0,
-    ) + 1
-
-    new_task = {
-        "id": next_id,
-        "title": payload["title"].strip(),
-        "done": False,
-    }
-
-    tasks.append(new_task)
-    return new_task
+    return insert_task(payload["title"].strip())
 
 @app.put("/tasks/{task_id}", description="Updates an existing task")
 def update_task(
