@@ -3,7 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, Response
 from fastapi.responses import JSONResponse
 
-from db import create_task as insert_task, get_task, init_db, list_tasks
+from db import (
+    create_task as insert_task,
+    delete_task as remove_task,
+    get_task,
+    init_db,
+    list_tasks,
+    update_task as save_task,
+)
 
 
 @asynccontextmanager
@@ -14,24 +21,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
-tasks = [
-        {
-        "id": 1,
-        "title": "Test 1",
-        "done": False,
-    },
-    {
-        "id": 2,
-        "title": "Test 2",
-        "done": False,
-    },
-    {
-        "id": 3,
-        "title": "Test 3",
-        "done": True,
-    },
-]
 
 @app.get("/", description="Returns the API name, version, and available endpoints")
 async def root():
@@ -76,12 +65,7 @@ def update_task(
     task_id: int,
     payload: dict | None = Body(default=None),
 ):
-    selected_task = None
-
-    for task in tasks:
-        if task["id"] == task_id:
-            selected_task = task
-            break
+    selected_task = get_task(task_id)
 
     if selected_task is None:
         return JSONResponse(
@@ -97,6 +81,9 @@ def update_task(
             content={"error": "Provide title or done"},
         )
 
+    title = selected_task["title"]
+    done = selected_task["done"]
+
     if "title" in payload:
         if (
             not isinstance(payload["title"], str)
@@ -107,7 +94,7 @@ def update_task(
                 content={"error": "Title cannot be empty"},
             )
 
-        selected_task["title"] = payload["title"].strip()
+        title = payload["title"].strip()
 
     if "done" in payload:
         if not isinstance(payload["done"], bool):
@@ -116,16 +103,22 @@ def update_task(
                 content={"error": "Done must be true or false"},
             )
 
-        selected_task["done"] = payload["done"]
+        done = payload["done"]
 
-    return selected_task
+    updated_task = save_task(task_id, title, done)
+
+    if updated_task is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Task {task_id} not found"},
+        )
+
+    return updated_task
 
 @app.delete("/tasks/{task_id}", status_code=204, description="Deletes a task")
 def delete_task(task_id: int):
-    for index, task in enumerate(tasks):
-        if task["id"] == task_id:
-            tasks.pop(index)
-            return Response(status_code=204)
+    if remove_task(task_id):
+        return Response(status_code=204)
 
     return JSONResponse(
         status_code=404,

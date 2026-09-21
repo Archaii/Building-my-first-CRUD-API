@@ -93,3 +93,28 @@ def create_task(title: str) -> dict:
         new_id = cursor.lastrowid
 
     return {"id": new_id, "title": title, "done": False}
+
+
+def update_task(task_id: int, title: str, done: bool) -> dict | None:
+    """Overwrite one task's title and done value, or return None if it is gone."""
+    with get_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
+            (title, int(done), task_id),
+        )
+
+        if cursor.rowcount == 0:
+            return None
+
+    return {"id": task_id, "title": title, "done": done}
+
+
+def delete_task(task_id: int) -> bool:
+    """Delete one task and report whether a row was actually removed."""
+    with get_connection() as connection:
+        cursor = connection.execute(
+            "DELETE FROM tasks WHERE id = ?",
+            (task_id,),
+        )
+
+        return cursor.rowcount > 0
