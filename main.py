@@ -15,7 +15,7 @@ from db import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create tasks.db, its table, and the example tasks before serving."""
+    """Create the tasks table and the example tasks in Postgres before serving."""
     init_db()
     yield
 
