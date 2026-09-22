@@ -17,3 +17,5 @@
 
 # SQLite database
 *.db
+# AI-generated comparison stack (Stage 6)
+ai-version/

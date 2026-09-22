@@ -129,3 +129,35 @@ More queries, and what each one returned, are in [docs/sql-notes.md](docs/sql-no
 ## Swagger UI
 
 ![Swagger UI showing all Task API endpoints](docs/swagger-ui-endpoints-overview.png)
+
+## Postgres in Docker
+
+The next version of this project stores its tasks in PostgreSQL instead of
+SQLite. Postgres is not installed on the machine — it runs as a container, so
+the same database version comes up on any computer with Docker.
+
+Start it with:
+
+```powershell
+docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks -p 5432:5432 -v taskdata:/var/lib/postgresql -d postgres:18
+```
+
+That command downloads the official `postgres:18` image, names the container
+`taskdb`, creates a database called `tasks`, and publishes port 5432 so the API
+can reach it at `localhost:5432`.
+
+The `-v taskdata:/var/lib/postgresql` part is the important one. A container
+loses everything it wrote the moment it is removed, so the rows are kept in a
+named volume that lives outside the container instead. Postgres 18 expects that
+mount at `/var/lib/postgresql`, not at `/var/lib/postgresql/data` as earlier
+versions did.
+
+Check that it is running and open a SQL prompt inside it:
+
+```powershell
+docker ps
+docker exec -it taskdb psql -U postgres -d tasks
+```
+
+At the prompt, `\dt` lists the tables and `\q` exits. There are no tables yet —
+the API creates the `tasks` table itself on its first start.
