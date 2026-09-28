@@ -1,0 +1,11 @@
+# Keep the image small and keep secrets out of it.
+.env
+.git
+.venv
+.vscode
+__pycache__
+*.pyc
+*.db
+*.pdf
+docs
+ai-version

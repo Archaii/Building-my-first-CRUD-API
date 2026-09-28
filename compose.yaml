@@ -1,0 +1,32 @@
+name: taskapi
+
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      # Inside the compose network the database is reached by its service name, db.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        # Wait until Postgres accepts connections, not just until its container starts.
+        condition: service_healthy
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # 5433 on the host because a locally installed Postgres already holds 5432.
+    ports: ["5433:5432"]
+    # Postgres 18 expects the volume at /var/lib/postgresql, not .../data.
+    volumes: [taskdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  taskdata:
