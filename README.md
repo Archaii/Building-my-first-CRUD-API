@@ -1,198 +1,180 @@
 # Task CRUD API
 
-A small FastAPI project for creating, reading, updating, and deleting tasks.
-Tasks are stored in a SQLite database file called `tasks.db`, so they are still
-there after the server restarts.
+A small FastAPI service for creating, reading, updating, and deleting tasks,
+backed by a PostgreSQL database. The API and the database each run in their own
+Docker container, and one command starts both.
 
-## Install and run
+This is the third storage engine behind the same API. The endpoints, the JSON
+shapes, and the status codes have not changed along the way:
 
-Requires Python 3.12 or newer.
-
-Install FastAPI once:
-
-```powershell
-python -m pip install "fastapi[standard]"
-```
-
-Then start the API with this command:
-
-```powershell
-python -m fastapi dev main.py --app app
-```
-
-Nothing else to set up. SQLite ships with Python, and the first start creates
-`tasks.db`, creates the `tasks` table, and seeds the three example tasks.
-
-Open the API at <http://127.0.0.1:8000> or its interactive Swagger documentation
-at <http://127.0.0.1:8000/docs>.
-
-## Why SQLite
-
-- **One file, zero setup.** The whole database is `tasks.db` next to the code.
-  There is no server to install, start, or configure, and no credentials.
-- **It ships with Python.** `sqlite3` is in the standard library, so a clone of
-  this repo needs no extra database dependency.
-- **The data survives restarts.** An in-memory list is gone the moment the
-  process stops; rows written to `tasks.db` stay on disk.
-
-## Where the database lives
-
-`tasks.db` sits in the project root and is created automatically on the first
-run. It is listed in `.gitignore`, so it is never committed and every clone
-starts with a fresh database holding the same three example tasks. Delete the
-file and restart the server to get back to that clean state.
-
-The `tasks` table has three columns:
-
-| Column | Type | Notes |
+| Version | Where tasks live | What keeps them |
 | --- | --- | --- |
-| `id` | INTEGER | Primary key. SQLite assigns it. |
-| `title` | TEXT | Required, never empty. |
-| `done` | INTEGER | Stored as `0` or `1`, returned to clients as `false` or `true`. |
+| A1 | A Python list in memory | Nothing — gone on restart |
+| A2 | A SQLite file, `tasks.db` | The file on disk |
+| A3 (this one) | Rows in PostgreSQL | A Docker volume |
+
+## Run it
+
+You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or
+Podman) and nothing else — no Python, no Postgres install.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The first start builds the API image, downloads Postgres, creates the `tasks`
+table, and inserts three example tasks. Then:
+
+- API: <http://localhost:8000/tasks>
+- Interactive docs (Swagger UI): <http://localhost:8000/docs>
+
+Stop everything with `docker compose down`. Your tasks are kept; see
+[Persistence](#persistence).
+
+## Configuration
+
+Settings come from a `.env` file, which Git ignores so that no password is ever
+committed. [`.env.example`](.env.example) lists every key with a placeholder
+value, and those placeholders work as-is for local use.
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `POSTGRES_USER` | Compose | Database user created on the first start |
+| `POSTGRES_PASSWORD` | Compose | That user's password |
+| `POSTGRES_DB` | Compose | Database name, `tasks` |
+| `DATABASE_URL` | The API, run outside Docker | Full connection string to `localhost:5433` |
+
+Inside Docker you do not set `DATABASE_URL` yourself. [`compose.yaml`](compose.yaml)
+builds it from the three `POSTGRES_*` values and points it at the host `db`,
+which is the database service's name on the network Compose creates.
+
+The password is only applied the first time the database volume is created.
+Changing it later in `.env` does not change it inside an existing database.
 
 ## How it is put together
 
-- [`main.py`](main.py) holds the routes, the validation, and the status codes.
-  The endpoints are exactly the ones from the in-memory version.
-- [`db.py`](db.py) holds the storage layer: opening the database, creating the
-  table, seeding it, and the SELECT, INSERT, UPDATE, and DELETE queries.
-- Every query that takes user input uses `?` placeholders and passes the values
-  separately, so nothing from a request is ever glued into an SQL string.
+| File | Role |
+| --- | --- |
+| [`main.py`](main.py) | Routes, request validation, and status codes. Unchanged since A1 apart from startup. |
+| [`db.py`](db.py) | The only file that talks to the database: connecting, creating the table, seeding it, and the five queries. |
+| [`Dockerfile`](Dockerfile) | Builds the API image from `python:3.12-slim`. |
+| [`compose.yaml`](compose.yaml) | Starts two services, `api` and `db`, plus the `taskdata` volume. |
+| [`requirements.txt`](requirements.txt) | The four direct dependencies, pinned. |
+
+Every query that takes user input uses `%s` placeholders and passes the values
+separately, so nothing from a request is ever glued into SQL text.
+
+On startup the API creates the `tasks` table if it is missing, then inserts the
+three example tasks only when the table is empty. Restarting never duplicates
+them.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | `SERIAL` | Primary key. Postgres assigns it and never reuses a number. |
+| `title` | `TEXT` | Required, never empty. |
+| `done` | `BOOLEAN` | Defaults to `false`. |
 
 ## Endpoints
 
-| Method | Endpoint | Description | Success |
-| --- | --- | --- | --- |
-| GET | `/` | Show the API name, version, and task endpoint | `200` |
-| GET | `/health` | Check whether the API is running | `200` |
-| GET | `/tasks` | List all tasks | `200` |
-| GET | `/tasks/{id}` | Get one task by ID | `200` |
-| POST | `/tasks` | Create a task from a JSON `title` | `201` |
-| PUT | `/tasks/{task_id}` | Update a task's `title` and/or `done` value | `200` |
-| DELETE | `/tasks/{task_id}` | Delete a task by ID | `204` |
+| Method | Endpoint | Description | Success | Errors |
+| --- | --- | --- | --- | --- |
+| GET | `/` | API name, version, and endpoints | `200` | — |
+| GET | `/health` | Whether the API is running | `200` | — |
+| GET | `/tasks` | List all tasks, ordered by id | `200` | — |
+| GET | `/tasks/{id}` | Get one task | `200` | `404` |
+| POST | `/tasks` | Create a task from `{"title": "..."}` | `201` | `400` |
+| PUT | `/tasks/{id}` | Change `title` and/or `done` | `200` | `400`, `404` |
+| DELETE | `/tasks/{id}` | Delete a task | `204`, empty body | `404` |
 
-Missing tasks return `404`. Invalid POST or PUT bodies return `400`.
+Every error response is JSON with an `error` key, for example
+`{"error": "Task 999 not found"}`.
 
 ## Example
 
-Request:
-
-```powershell
-curl.exe -i http://127.0.0.1:8000/tasks/1
+```bash
+curl -i -X POST http://localhost:8000/tasks -H "Content-Type: application/json" -d '{"title":"Ship the Docker stack"}'
 ```
-
-Output:
 
 ```text
-HTTP/1.1 200 OK
+HTTP/1.1 201 Created
 server: uvicorn
-content-length: 38
+content-length: 53
 content-type: application/json
 
-{"id":1,"title":"Test 1","done":false}
+{"id":6,"title":"Ship the Docker stack","done":false}
 ```
 
-## Persistence check
+On Windows PowerShell, use `curl.exe` and escape the inner quotes:
+`-d "{\"title\":\"Ship the Docker stack\"}"`.
 
-```powershell
-curl.exe -i -X POST http://127.0.0.1:8000/tasks -H "Content-Type: application/json" -d "{\"title\":\"Buy milk\"}"
+## Persistence
+
+A container loses everything it wrote the moment it is removed. The database
+files therefore live in a named volume, `taskdata`, which exists outside the
+containers:
+
+```bash
+docker compose down     # removes both containers and their network
+docker compose up       # creates fresh containers
+curl http://localhost:8000/tasks   # every task is still there
 ```
 
-Stop the server, start it again with the same command as above, then run:
+`docker compose down -v` also deletes the volume, and with it every task. Use it
+only when you want to start over from the three example tasks.
 
-```powershell
-curl.exe -i http://127.0.0.1:8000/tasks
+## Looking inside the database
+
+Open a SQL prompt inside the running database container:
+
+```bash
+docker compose exec db psql -U postgres -d tasks
 ```
 
-`Buy milk` is still in the list, because it is a row in `tasks.db` and not an
-entry in a Python list.
+`\dt` lists the tables, `SELECT * FROM tasks;` shows the rows the API serves,
+and `\q` exits.
 
-## SQL by hand
+![The tasks table queried with psql inside the db container](docs/postgres-tasks-table.png)
 
-`tasks.db` opens directly in [DB Browser for SQLite](https://sqlitebrowser.org/).
-Its rows are the same rows the API serves — there is one file and no syncing
-step, so a change made in DB Browser shows up in `GET /tasks` immediately.
+A graphical client such as DBeaver or pgAdmin can connect too: host `localhost`,
+port `5433`, and the user, password, and database from your `.env`.
 
-One query run in its "Execute SQL" tab:
+## Running the API outside Docker
 
-```sql
-SELECT * FROM tasks WHERE done = 1;
+Useful while editing code, because the server reloads on every save. Start only
+the database, then run the API from a virtual environment:
+
+```bash
+docker compose up -d db
+python -m venv .venv
+.venv/Scripts/activate        # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
 ```
 
-It returned one row, `3 | Test 3 | 1`, because `Test 3` is the only seeded task
-whose `done` value is `1`.
+This uses `DATABASE_URL` from `.env`, which points at `localhost:5433`.
 
-More queries, and what each one returned, are in [docs/sql-notes.md](docs/sql-notes.md).
+## Troubleshooting
 
-![The tasks table open in DB Browser for SQLite](docs/db-browser-tasks-table.png)
+**`password authentication failed for user "postgres"` when running outside
+Docker.** Another PostgreSQL, installed directly on the machine, is answering on
+that port. That is why this project publishes the database on 5433 instead of
+the usual 5432. Check that `DATABASE_URL` in `.env` uses port 5433.
 
-## Swagger UI
+**`CERTIFICATE_VERIFY_FAILED` during `docker compose up --build`.** Some
+antivirus products (AVG and Avast among them) decrypt HTTPS traffic and re-sign
+it with their own certificate. Windows trusts that certificate but the Linux
+image does not, so `pip install` fails inside the build. Add `pypi.org` and
+`files.pythonhosted.org` to the antivirus's HTTPS scanning exceptions.
+
+**The database container exits right after starting.** Postgres 18 images
+expect the volume mounted at `/var/lib/postgresql`. Guides written for earlier
+versions mount it at `/var/lib/postgresql/data`, which Postgres 18 refuses.
+
+## Earlier versions
+
+The SQLite version (A2) is in the Git history. Its notes are kept in
+[docs/sql-notes.md](docs/sql-notes.md), with a screenshot of
+[its database in DB Browser for SQLite](docs/db-browser-tasks-table.png).
 
 ![Swagger UI showing all Task API endpoints](docs/swagger-ui-endpoints-overview.png)
-
-## Postgres in Docker
-
-The next version of this project stores its tasks in PostgreSQL instead of
-SQLite. Postgres is not installed on the machine — it runs as a container, so
-the same database version comes up on any computer with Docker.
-
-Start it with:
-
-```powershell
-docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks -p 5433:5432 -v taskdata:/var/lib/postgresql -d postgres:18
-```
-
-That command downloads the official `postgres:18` image, names the container
-`taskdb`, creates a database called `tasks`, and publishes the container's port
-5432 on the host as 5433, so the API can reach it at `localhost:5433`.
-
-The host port is 5433 rather than 5432 because this machine already runs a
-locally installed PostgreSQL 18 service on 5432. Windows lets Docker bind the
-same port without complaining, but the installed service answers first, so
-every connection failed with `password authentication failed for user
-"postgres"` — the app was reaching the wrong database. Publishing on 5433
-leaves the installed service alone and removes the ambiguity.
-
-The `-v taskdata:/var/lib/postgresql` part is the important one. A container
-loses everything it wrote the moment it is removed, so the rows are kept in a
-named volume that lives outside the container instead. Postgres 18 expects that
-mount at `/var/lib/postgresql`, not at `/var/lib/postgresql/data` as earlier
-versions did.
-
-Check that it is running and open a SQL prompt inside it:
-
-```powershell
-docker ps
-docker exec -it taskdb psql -U postgres -d tasks
-```
-
-At the prompt, `\dt` lists the tables and `\q` exits. There are no tables yet —
-the API creates the `tasks` table itself on its first start.
-
-## Connecting the API to Postgres
-
-The connection details are not in the code. They live in a `.env` file that Git
-ignores, so the database password is never committed:
-
-```
-DATABASE_URL=postgresql://postgres:dev@localhost:5433/tasks
-```
-
-`.env.example` is committed in its place. It lists the same key with a
-placeholder value, so anyone cloning this repository knows what to set without
-ever seeing a real password. Copy it and fill it in:
-
-```powershell
-copy .env.example .env
-```
-
-Install the dependencies, including the `psycopg` driver that talks to Postgres:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-On its first start the API creates the `tasks` table if it is missing and
-inserts the three example tasks only when the table is empty. Starting the API
-again finds three rows already there and inserts nothing, so restarts never
-duplicate the examples.
