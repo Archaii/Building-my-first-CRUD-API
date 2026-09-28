@@ -61,9 +61,13 @@ def row_to_task(row: dict) -> dict:
 
 
 def list_tasks() -> list[dict]:
-    """Return every task."""
+    """Return every task, oldest first.
+
+    Postgres has no natural row order. An UPDATE writes a new copy of the row,
+    so without ORDER BY an edited task would jump to the end of the list.
+    """
     with get_connection() as connection:
-        rows = connection.execute("SELECT * FROM tasks").fetchall()
+        rows = connection.execute("SELECT * FROM tasks ORDER BY id").fetchall()
 
     return [row_to_task(row) for row in rows]
 
