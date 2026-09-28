@@ -84,28 +84,25 @@ def get_task(task_id: int) -> dict | None:
 
 
 def create_task(title: str) -> dict:
-    """Insert one task and return it with the id the database handed out."""
+    """Insert one task and return the row exactly as Postgres stored it."""
     with get_connection() as connection:
-        new_id = connection.execute(
-            "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING id",
+        row = connection.execute(
+            "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING *",
             (title, False),
-        ).fetchone()["id"]
+        ).fetchone()
 
-    return {"id": new_id, "title": title, "done": False}
+    return row_to_task(row)
 
 
 def update_task(task_id: int, title: str, done: bool) -> dict | None:
     """Overwrite one task's title and done value, or return None if it is gone."""
     with get_connection() as connection:
-        cursor = connection.execute(
-            "UPDATE tasks SET title = %s, done = %s WHERE id = %s",
+        row = connection.execute(
+            "UPDATE tasks SET title = %s, done = %s WHERE id = %s RETURNING *",
             (title, done, task_id),
-        )
+        ).fetchone()
 
-        if cursor.rowcount == 0:
-            return None
-
-    return {"id": task_id, "title": title, "done": done}
+    return row_to_task(row) if row else None
 
 
 def delete_task(task_id: int) -> bool:
